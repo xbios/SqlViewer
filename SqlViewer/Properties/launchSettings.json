@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "SqlViewer (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "SqlViewer (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}

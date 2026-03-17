@@ -1,0 +1,73 @@
+<!doctype html>
+<html>
+  <head>
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+      }
+      #container {
+        width: 100%;
+        height: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="container"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
+    <script>
+      require.config({
+        paths: {
+          vs: "https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs",
+        },
+      });
+
+      var editor;
+      require(["vs/editor/editor.main"], function () {
+        editor = monaco.editor.create(document.getElementById("container"), {
+          value: "-- SQL Viewer",
+          language: "sql",
+          theme: "vs-dark",
+          readOnly: true,
+          automaticLayout: true,
+          minimap: { enabled: false },
+        });
+      });
+
+      function setContent(content) {
+        console.log(
+          "setContent called with content length:",
+          content ? content.length : 0,
+        );
+        if (editor) {
+          console.log("Setting editor content");
+          editor.setValue(content);
+          editor.layout(); // Force layout update
+        } else {
+          console.log("Editor not ready, retrying...");
+          // Retry if editor is not loaded yet
+          setTimeout(() => setContent(content), 100);
+        }
+      }
+
+      function setTheme(theme) {
+        if (editor) {
+          monaco.editor.setTheme(theme === "Dark" ? "vs-dark" : "vs");
+        }
+      }
+
+      function setReadOnly(readonly) {
+        if (editor) {
+          editor.updateOptions({ readOnly: readonly });
+        }
+      }
+    </script>
+  </body>
+</html>

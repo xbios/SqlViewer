@@ -1,0 +1,53 @@
+# Build output
+bin/
+obj/
+out/
+PublishOutput/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Rider
+.idea/
+
+# NuGet
+*.nupkg
+*.snupkg
+packages/
+!**/packages/build/
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# .NET
+*.dll
+*.exe
+!publish.bat
+
+# Logs
+*.log
+build.log
+build.txt
+build_app.txt
+build_core.txt
+winui.txt
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# SQLite database (runtime data)
+*.db
+*.db-shm
+*.db-wal
+
+# App local data
+AppData/
+
+# Publish artifacts
+publish/
