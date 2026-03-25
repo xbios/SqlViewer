@@ -1,10 +1,14 @@
 const pickFolderButton = document.getElementById("pick-folder-button");
+const appShellElement = document.querySelector(".app-shell");
+const panelResizerElement = document.getElementById("panel-resizer");
 const folderPathElement = document.getElementById("folder-path");
 const folderListElement = document.getElementById("folder-list");
 const fileCountElement = document.getElementById("file-count");
 const fileListElement = document.getElementById("file-list");
 const activeFileNameElement = document.getElementById("active-file-name");
 const fileContentElement = document.getElementById("file-content");
+const openNotepadButton = document.getElementById("open-notepad-button");
+const openFolderButton = document.getElementById("open-folder-button");
 const sqlKeywords = new Set([
   "add",
   "alter",
@@ -64,10 +68,35 @@ const sqlKeywords = new Set([
 
 let selectedFilePath = null;
 let selectedFolderPath = null;
+let isResizingPanels = false;
 const dateFormatter = new Intl.DateTimeFormat("tr-TR", {
   dateStyle: "short",
   timeStyle: "short"
 });
+
+function setSidebarWidth(nextWidth) {
+  const minWidth = 250;
+  const maxWidth = Math.min(640, window.innerWidth - 360);
+  const safeWidth = Math.max(minWidth, Math.min(nextWidth, maxWidth));
+  document.documentElement.style.setProperty("--sidebar-width", `${safeWidth}px`);
+}
+
+function handlePointerMove(event) {
+  if (!isResizingPanels) {
+    return;
+  }
+
+  setSidebarWidth(event.clientX);
+}
+
+function stopResizingPanels() {
+  if (!isResizingPanels) {
+    return;
+  }
+
+  isResizingPanels = false;
+  document.body.classList.remove("is-resizing");
+}
 
 function escapeHtml(value) {
   return value
@@ -107,9 +136,16 @@ function renderCodeContent(content) {
   codeElement.innerHTML = highlightSql(content);
 }
 
+function updateToolButtons() {
+  const hasFile = Boolean(selectedFilePath);
+  openNotepadButton.disabled = !hasFile;
+  openFolderButton.disabled = !hasFile;
+}
+
 function setEmptyFileState(message) {
   activeFileNameElement.textContent = "Bir dosya sec";
   renderCodeContent(message);
+  updateToolButtons();
 }
 
 async function loadFolderFiles(folderPath) {
@@ -123,6 +159,7 @@ async function loadFolderFiles(folderPath) {
   const result = await window.sqlViewer.listFolderFiles(folderPath);
   fileCountElement.textContent = `${result.files.length} dosya`;
   renderFileList(result.files);
+  updateToolButtons();
 }
 
 function renderFolderList(folders) {
@@ -192,6 +229,7 @@ function renderFileList(files) {
       button.classList.add("active");
 
       activeFileNameElement.textContent = file.name;
+      updateToolButtons();
       renderCodeContent("Yukleniyor...");
 
       try {
@@ -236,3 +274,51 @@ pickFolderButton.addEventListener("click", async () => {
     setEmptyFileState("Bir hata olustu.");
   }
 });
+
+openNotepadButton.addEventListener("click", async () => {
+  if (!selectedFilePath) {
+    return;
+  }
+
+  try {
+    await window.sqlViewer.openInNotepad(selectedFilePath);
+  } catch (error) {
+    renderCodeContent("Notepad acilirken bir hata olustu: " + error.message);
+  }
+});
+
+openFolderButton.addEventListener("click", async () => {
+  if (!selectedFilePath) {
+    return;
+  }
+
+  try {
+    await window.sqlViewer.openContainingFolder(selectedFilePath);
+  } catch (error) {
+    renderCodeContent("Klasor acilirken bir hata olustu: " + error.message);
+  }
+});
+
+panelResizerElement.addEventListener("pointerdown", (event) => {
+  isResizingPanels = true;
+  document.body.classList.add("is-resizing");
+  panelResizerElement.setPointerCapture(event.pointerId);
+});
+
+panelResizerElement.addEventListener("pointermove", handlePointerMove);
+panelResizerElement.addEventListener("pointerup", stopResizingPanels);
+panelResizerElement.addEventListener("pointercancel", stopResizingPanels);
+window.addEventListener("pointermove", handlePointerMove);
+window.addEventListener("pointerup", stopResizingPanels);
+window.addEventListener("resize", () => {
+  const sidebarWidth = Number.parseInt(
+    getComputedStyle(document.documentElement).getPropertyValue("--sidebar-width"),
+    10
+  );
+
+  if (!Number.isNaN(sidebarWidth)) {
+    setSidebarWidth(sidebarWidth);
+  }
+});
+
+updateToolButtons();

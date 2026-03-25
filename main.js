@@ -1,6 +1,7 @@
-const { app, BrowserWindow, dialog, ipcMain } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
 const fs = require("fs/promises");
 const path = require("path");
+const { spawn } = require("child_process");
 
 async function getSqlFiles(folderPath) {
   const entries = await fs.readdir(folderPath, { withFileTypes: true });
@@ -118,4 +119,25 @@ ipcMain.handle("read-sql-file", async (_event, filePath) => {
     filePath,
     content
   };
+});
+
+ipcMain.handle("open-in-notepad", async (_event, filePath) => {
+  await fs.access(filePath);
+
+  return await new Promise((resolve, reject) => {
+    const process = spawn("notepad.exe", [filePath], {
+      detached: true,
+      stdio: "ignore"
+    });
+
+    process.on("error", reject);
+    process.unref();
+    resolve({ ok: true });
+  });
+});
+
+ipcMain.handle("open-containing-folder", async (_event, filePath) => {
+  await fs.access(filePath);
+  shell.showItemInFolder(filePath);
+  return { ok: true };
 });
