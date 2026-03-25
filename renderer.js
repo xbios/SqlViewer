@@ -75,32 +75,32 @@ let isResizingPanels = false;
 let originalSqlContent = "";
 let isCollapsedView = false;
 let lastCollapsedSqlContent = "";
+const formatterIndent = "    ";
 const dateFormatter = new Intl.DateTimeFormat("tr-TR", {
   dateStyle: "short",
   timeStyle: "short"
 });
 const sqlBlockPatterns = [
   { pattern: /\bWITH\b/gi, replacement: "\nWITH " },
-  { pattern: /\bSELECT\b/gi, replacement: "\nSELECT " },
-  { pattern: /\bFROM\b/gi, replacement: "\nFROM " },
-  { pattern: /\bINNER\s+JOIN\b/gi, replacement: "\nINNER JOIN " },
-  { pattern: /\bLEFT\s+JOIN\b/gi, replacement: "\nLEFT JOIN " },
-  { pattern: /\bRIGHT\s+JOIN\b/gi, replacement: "\nRIGHT JOIN " },
-  { pattern: /\bFULL\s+OUTER\s+JOIN\b/gi, replacement: "\nFULL OUTER JOIN " },
-  { pattern: /\bFULL\s+JOIN\b/gi, replacement: "\nFULL JOIN " },
-  { pattern: /\bCROSS\s+JOIN\b/gi, replacement: "\nCROSS JOIN " },
-  { pattern: /\bJOIN\b/gi, replacement: "\nJOIN " },
-  { pattern: /\bWHERE\b/gi, replacement: "\nWHERE " },
-  { pattern: /\bGROUP\s+BY\b/gi, replacement: "\nGROUP BY " },
-  { pattern: /\bORDER\s+BY\b/gi, replacement: "\nORDER BY " },
-  { pattern: /\bHAVING\b/gi, replacement: "\nHAVING " },
-  { pattern: /\bVALUES\b/gi, replacement: "\nVALUES " },
-  { pattern: /\bSET\b/gi, replacement: "\nSET " },
-  { pattern: /\bUNION\s+ALL\b/gi, replacement: "\nUNION ALL " },
-  { pattern: /\bUNION\b/gi, replacement: "\nUNION " },
-  { pattern: /\bON\b/gi, replacement: "\n  ON " },
-  { pattern: /\bAND\b/gi, replacement: "\n    AND " },
-  { pattern: /\bOR\b/gi, replacement: "\n    OR " }
+  { pattern: /\bSELECT\b/gi, replacement: "\nSELECT" },
+  { pattern: /\bFROM\b/gi, replacement: "\nFROM" },
+  { pattern: /\bINNER\s+JOIN\b/gi, replacement: "\nINNER JOIN" },
+  { pattern: /\bLEFT\s+OUTER\s+JOIN\b/gi, replacement: "\nLEFT OUTER JOIN" },
+  { pattern: /\bLEFT\s+JOIN\b/gi, replacement: "\nLEFT JOIN" },
+  { pattern: /\bRIGHT\s+OUTER\s+JOIN\b/gi, replacement: "\nRIGHT OUTER JOIN" },
+  { pattern: /\bRIGHT\s+JOIN\b/gi, replacement: "\nRIGHT JOIN" },
+  { pattern: /\bFULL\s+OUTER\s+JOIN\b/gi, replacement: "\nFULL OUTER JOIN" },
+  { pattern: /\bFULL\s+JOIN\b/gi, replacement: "\nFULL JOIN" },
+  { pattern: /\bCROSS\s+JOIN\b/gi, replacement: "\nCROSS JOIN" },
+  { pattern: /\bJOIN\b/gi, replacement: "\nJOIN" },
+  { pattern: /\bWHERE\b/gi, replacement: "\nWHERE" },
+  { pattern: /\bGROUP\s+BY\b/gi, replacement: "\nGROUP BY" },
+  { pattern: /\bORDER\s+BY\b/gi, replacement: "\nORDER BY" },
+  { pattern: /\bHAVING\b/gi, replacement: "\nHAVING" },
+  { pattern: /\bVALUES\b/gi, replacement: "\nVALUES" },
+  { pattern: /\bSET\b/gi, replacement: "\nSET" },
+  { pattern: /\bUNION\s+ALL\b/gi, replacement: "\nUNION ALL" },
+  { pattern: /\bUNION\b/gi, replacement: "\nUNION" }
 ];
 
 function setSidebarWidth(nextWidth) {
@@ -181,10 +181,10 @@ function updateToolButtons() {
   setToolButtonState(saveFormattedButton, canSaveFormatted);
   toggleCollapseButton.title = isCollapsedView
     ? "Normal gorunume don"
-    : "Collapsed format";
+    : "SQL formatla";
   toggleCollapseButton.setAttribute(
     "aria-label",
-    isCollapsedView ? "Normal gorunume don" : "Collapsed format"
+    isCollapsedView ? "Normal gorunume don" : "SQL formatla"
   );
 }
 
@@ -219,43 +219,68 @@ function unmaskProtectedSegments(content, tokens) {
   );
 }
 
-function collapseSqlContent(content) {
+function formatSqlContent(content) {
   const { masked, tokens } = maskProtectedSegments(content);
-  let collapsed = masked.replace(/\r\n/g, "\n");
+  let formatted = masked.replace(/\r\n/g, "\n");
 
-  collapsed = collapsed
+  formatted = formatted
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean)
     .join(" ")
     .replace(/[ \t]+/g, " ")
     .replace(/\s*,\s*/g, ", ")
+    .replace(/\s*\(\s*/g, " (")
     .replace(/\(\s+/g, "(")
     .replace(/\s+\)/g, ")")
+    .replace(/\s*=\s*/g, " = ")
+    .replace(/\s*<>\s*/g, " <> ")
+    .replace(/\s*>=\s*/g, " >= ")
+    .replace(/\s*<=\s*/g, " <= ")
+    .replace(/\s*>\s*/g, " > ")
+    .replace(/\s*<\s*/g, " < ")
     .trim();
 
   sqlBlockPatterns.forEach(({ pattern, replacement }) => {
-    collapsed = collapsed.replace(pattern, replacement);
+    formatted = formatted.replace(pattern, replacement);
   });
 
-  collapsed = collapsed
+  formatted = formatted
+    .replace(/\bON\b/gi, `\n${formatterIndent}ON`)
+    .replace(/\bAND\b/gi, `\n${formatterIndent.repeat(2)}AND`)
+    .replace(/\bOR\b/gi, `\n${formatterIndent.repeat(2)}OR`)
+    .replace(/,\s*/g, ",\n")
     .replace(/\n{2,}/g, "\n")
     .split("\n")
-    .map((line) => line.trimEnd())
+    .map((line) => line.trim())
     .filter(Boolean)
     .map((line) => {
-      const normalized = line.trimStart();
-
-      if (/^(ON|AND|OR)\b/i.test(normalized)) {
-        return `  ${normalized}`;
+      if (/^SELECT\b/i.test(line)) {
+        return line;
       }
 
-      return normalized;
+      if (/^FROM\b|^WHERE\b|^GROUP BY\b|^ORDER BY\b|^HAVING\b|^VALUES\b|^SET\b|^UNION\b|^WITH\b/i.test(line)) {
+        return line;
+      }
+
+      if (/^(INNER JOIN|LEFT JOIN|LEFT OUTER JOIN|RIGHT JOIN|RIGHT OUTER JOIN|FULL JOIN|FULL OUTER JOIN|CROSS JOIN|JOIN)\b/i.test(line)) {
+        return line;
+      }
+
+      if (/^ON\b/i.test(line)) {
+        return `${formatterIndent}${line}`;
+      }
+
+      if (/^(AND|OR)\b/i.test(line)) {
+        return `${formatterIndent.repeat(2)}${line}`;
+      }
+
+      return `${formatterIndent}${line}`;
     })
     .join("\n")
     .trim();
 
-  return unmaskProtectedSegments(collapsed, tokens);
+  return unmaskProtectedSegments(formatted, tokens);
 }
 
 function renderSelectedSqlContent() {
@@ -271,7 +296,7 @@ function renderSelectedSqlContent() {
   }
 
   try {
-    lastCollapsedSqlContent = collapseSqlContent(originalSqlContent);
+    lastCollapsedSqlContent = formatSqlContent(originalSqlContent);
     renderCodeContent(lastCollapsedSqlContent);
   } catch {
     isCollapsedView = false;
