@@ -7,7 +7,9 @@ const fileCountElement = document.getElementById("file-count");
 const fileListElement = document.getElementById("file-list");
 const activeFileNameElement = document.getElementById("active-file-name");
 const fileContentElement = document.getElementById("file-content");
+const toggleCollapseButton = document.getElementById("toggle-collapse-button");
 const openNotepadButton = document.getElementById("open-notepad-button");
+const openSsmsButton = document.getElementById("open-ssms-button");
 const openFolderButton = document.getElementById("open-folder-button");
 const sqlKeywords = new Set([
   "add",
@@ -69,10 +71,35 @@ const sqlKeywords = new Set([
 let selectedFilePath = null;
 let selectedFolderPath = null;
 let isResizingPanels = false;
+let originalSqlContent = "";
+let isCollapsedView = false;
 const dateFormatter = new Intl.DateTimeFormat("tr-TR", {
   dateStyle: "short",
   timeStyle: "short"
 });
+const sqlBlockPatterns = [
+  { pattern: /\bWITH\b/gi, replacement: "\nWITH " },
+  { pattern: /\bSELECT\b/gi, replacement: "\nSELECT " },
+  { pattern: /\bFROM\b/gi, replacement: "\nFROM " },
+  { pattern: /\bINNER\s+JOIN\b/gi, replacement: "\nINNER JOIN " },
+  { pattern: /\bLEFT\s+JOIN\b/gi, replacement: "\nLEFT JOIN " },
+  { pattern: /\bRIGHT\s+JOIN\b/gi, replacement: "\nRIGHT JOIN " },
+  { pattern: /\bFULL\s+OUTER\s+JOIN\b/gi, replacement: "\nFULL OUTER JOIN " },
+  { pattern: /\bFULL\s+JOIN\b/gi, replacement: "\nFULL JOIN " },
+  { pattern: /\bCROSS\s+JOIN\b/gi, replacement: "\nCROSS JOIN " },
+  { pattern: /\bJOIN\b/gi, replacement: "\nJOIN " },
+  { pattern: /\bWHERE\b/gi, replacement: "\nWHERE " },
+  { pattern: /\bGROUP\s+BY\b/gi, replacement: "\nGROUP BY " },
+  { pattern: /\bORDER\s+BY\b/gi, replacement: "\nORDER BY " },
+  { pattern: /\bHAVING\b/gi, replacement: "\nHAVING " },
+  { pattern: /\bVALUES\b/gi, replacement: "\nVALUES " },
+  { pattern: /\bSET\b/gi, replacement: "\nSET " },
+  { pattern: /\bUNION\s+ALL\b/gi, replacement: "\nUNION ALL " },
+  { pattern: /\bUNION\b/gi, replacement: "\nUNION " },
+  { pattern: /\bON\b/gi, replacement: "\n  ON " },
+  { pattern: /\bAND\b/gi, replacement: "\n    AND " },
+  { pattern: /\bOR\b/gi, replacement: "\n    OR " }
+];
 
 function setSidebarWidth(nextWidth) {
   const minWidth = 250;
@@ -136,16 +163,113 @@ function renderCodeContent(content) {
   codeElement.innerHTML = highlightSql(content);
 }
 
+function setToolButtonState(button, isActive) {
+  button.classList.toggle("active", isActive);
+}
+
 function updateToolButtons() {
   const hasFile = Boolean(selectedFilePath);
+  toggleCollapseButton.disabled = !hasFile;
   openNotepadButton.disabled = !hasFile;
+  openSsmsButton.disabled = !hasFile;
   openFolderButton.disabled = !hasFile;
+  setToolButtonState(toggleCollapseButton, hasFile && isCollapsedView);
+  toggleCollapseButton.title = isCollapsedView
+    ? "Normal gorunume don"
+    : "Collapsed format";
+  toggleCollapseButton.setAttribute(
+    "aria-label",
+    isCollapsedView ? "Normal gorunume don" : "Collapsed format"
+  );
 }
 
 function setEmptyFileState(message) {
+  originalSqlContent = "";
+  isCollapsedView = false;
   activeFileNameElement.textContent = "Bir dosya sec";
   renderCodeContent(message);
   updateToolButtons();
+}
+
+function maskProtectedSegments(content) {
+  const tokens = [];
+  const masked = content.replace(
+    /(--.*$|\/\*[\s\S]*?\*\/|'(?:''|[^'])*')/gm,
+    (match) => {
+      const token = `__SQL_TOKEN_${tokens.length}__`;
+      tokens.push(match);
+      return token;
+    }
+  );
+
+  return { masked, tokens };
+}
+
+function unmaskProtectedSegments(content, tokens) {
+  return tokens.reduce(
+    (currentContent, token, index) =>
+      currentContent.replaceAll(`__SQL_TOKEN_${index}__`, token),
+    content
+  );
+}
+
+function collapseSqlContent(content) {
+  const { masked, tokens } = maskProtectedSegments(content);
+  let collapsed = masked.replace(/\r\n/g, "\n");
+
+  collapsed = collapsed
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join(" ")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\s*,\s*/g, ", ")
+    .replace(/\(\s+/g, "(")
+    .replace(/\s+\)/g, ")")
+    .trim();
+
+  sqlBlockPatterns.forEach(({ pattern, replacement }) => {
+    collapsed = collapsed.replace(pattern, replacement);
+  });
+
+  collapsed = collapsed
+    .replace(/\n{2,}/g, "\n")
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .filter(Boolean)
+    .map((line) => {
+      const normalized = line.trimStart();
+
+      if (/^(ON|AND|OR)\b/i.test(normalized)) {
+        return `  ${normalized}`;
+      }
+
+      return normalized;
+    })
+    .join("\n")
+    .trim();
+
+  return unmaskProtectedSegments(collapsed, tokens);
+}
+
+function renderSelectedSqlContent() {
+  if (!originalSqlContent) {
+    return;
+  }
+
+  if (!isCollapsedView) {
+    renderCodeContent(originalSqlContent);
+    return;
+  }
+
+  try {
+    renderCodeContent(collapseSqlContent(originalSqlContent));
+  } catch {
+    isCollapsedView = false;
+    renderCodeContent(originalSqlContent);
+  } finally {
+    updateToolButtons();
+  }
 }
 
 async function loadFolderFiles(folderPath) {
@@ -229,14 +353,21 @@ function renderFileList(files) {
       button.classList.add("active");
 
       activeFileNameElement.textContent = file.name;
+      originalSqlContent = "";
+      isCollapsedView = false;
       updateToolButtons();
       renderCodeContent("Yukleniyor...");
 
       try {
         const result = await window.sqlViewer.readSqlFile(file.path);
-        renderCodeContent(result.content || "");
+        originalSqlContent = result.content || "";
+        isCollapsedView = false;
+        renderSelectedSqlContent();
       } catch (error) {
+        originalSqlContent = "";
+        isCollapsedView = false;
         renderCodeContent("Dosya okunurken bir hata olustu: " + error.message);
+        updateToolButtons();
       }
     });
 
@@ -275,6 +406,15 @@ pickFolderButton.addEventListener("click", async () => {
   }
 });
 
+toggleCollapseButton.addEventListener("click", () => {
+  if (!selectedFilePath || !originalSqlContent) {
+    return;
+  }
+
+  isCollapsedView = !isCollapsedView;
+  renderSelectedSqlContent();
+});
+
 openNotepadButton.addEventListener("click", async () => {
   if (!selectedFilePath) {
     return;
@@ -284,6 +424,18 @@ openNotepadButton.addEventListener("click", async () => {
     await window.sqlViewer.openInNotepad(selectedFilePath);
   } catch (error) {
     renderCodeContent("Notepad acilirken bir hata olustu: " + error.message);
+  }
+});
+
+openSsmsButton.addEventListener("click", async () => {
+  if (!selectedFilePath) {
+    return;
+  }
+
+  try {
+    await window.sqlViewer.openInSsms(selectedFilePath);
+  } catch (error) {
+    renderCodeContent("SSMS acilirken bir hata olustu: " + error.message);
   }
 });
 

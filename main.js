@@ -3,6 +3,36 @@ const fs = require("fs/promises");
 const path = require("path");
 const { spawn } = require("child_process");
 
+async function findSsmsExecutable() {
+  const programFiles = process.env.ProgramFiles || "C:\\Program Files";
+  const programFilesX86 =
+    process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)";
+  const candidates = [
+    path.join(programFilesX86, "Microsoft SQL Server Management Studio 20", "Common7", "IDE", "Ssms.exe"),
+    path.join(programFiles, "Microsoft SQL Server Management Studio 20", "Common7", "IDE", "Ssms.exe"),
+    path.join(programFilesX86, "Microsoft SQL Server Management Studio 19", "Common7", "IDE", "Ssms.exe"),
+    path.join(programFiles, "Microsoft SQL Server Management Studio 19", "Common7", "IDE", "Ssms.exe"),
+    path.join(programFilesX86, "Microsoft SQL Server Management Studio 18", "Common7", "IDE", "Ssms.exe"),
+    path.join(programFiles, "Microsoft SQL Server Management Studio 18", "Common7", "IDE", "Ssms.exe"),
+    "ssms.exe"
+  ];
+
+  for (const candidate of candidates) {
+    if (candidate.toLowerCase() === "ssms.exe") {
+      return candidate;
+    }
+
+    try {
+      await fs.access(candidate);
+      return candidate;
+    } catch {
+      // Try the next common SSMS install location.
+    }
+  }
+
+  throw new Error("SSMS bulunamadi. SQL Server Management Studio kurulu olmayabilir.");
+}
+
 async function getSqlFiles(folderPath) {
   const entries = await fs.readdir(folderPath, { withFileTypes: true });
   const sqlEntries = entries.filter(
@@ -140,4 +170,27 @@ ipcMain.handle("open-containing-folder", async (_event, filePath) => {
   await fs.access(filePath);
   shell.showItemInFolder(filePath);
   return { ok: true };
+});
+
+ipcMain.handle("open-in-ssms", async (_event, filePath) => {
+  await fs.access(filePath);
+  const ssmsPath = await findSsmsExecutable();
+
+  return await new Promise((resolve, reject) => {
+    const process = spawn(ssmsPath, [filePath], {
+      detached: true,
+      stdio: "ignore"
+    });
+
+    process.on("error", (error) => {
+      reject(
+        new Error(
+          `SSMS acilamadi. ${error.message || "Program baslatilamadi."}`
+        )
+      );
+    });
+
+    process.unref();
+    resolve({ ok: true });
+  });
 });
