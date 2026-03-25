@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0"
+    />
+    <title>SQL Viewer</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="sidebar-top">
+          <p class="eyebrow">Desktop SQL Viewer</p>
+          <h1>SQL Dosyalarini Incele</h1>
+          <p class="sidebar-copy">
+            Bir klasor sec, icindeki SQL dosyalarini listeleyelim ve tek tikla
+            icerigini gorelim.
+          </p>
+          <button id="pick-folder-button" class="primary-button" type="button">
+            Klasor Sec
+          </button>
+        </div>
+
+        <div class="folder-panel">
+          <p class="panel-label">Secilen Klasor</p>
+          <p id="folder-path" class="folder-path">Henuz klasor secilmedi.</p>
+        </div>
+
+        <div class="file-list-panel">
+          <div class="file-list-header">
+            <p class="panel-label">SQL Dosyalari</p>
+            <span id="file-count" class="file-count">0 dosya</span>
+          </div>
+          <div id="file-list" class="file-list empty">
+            Klasor secildiginde `.sql` dosyalari burada listelenecek.
+          </div>
+        </div>
+      </aside>
+
+      <main class="viewer">
+        <div class="viewer-header">
+          <div>
+            <p class="panel-label">Dosya Icerigi</p>
+            <h2 id="active-file-name">Bir dosya sec</h2>
+          </div>
+        </div>
+
+        <pre id="file-content" class="code-viewer"><code>Secilen SQL dosyasinin icerigi burada gorunecek.</code></pre>
+      </main>
+    </div>
+
+    <script src="renderer.js"></script>
+  </body>
+</html>

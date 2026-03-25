@@ -1,53 +1,18 @@
-# Build output
-bin/
-obj/
+node_modules/
+dist/
 out/
-PublishOutput/
+release/
 
-# Visual Studio
-.vs/
-*.user
-*.suo
-*.userosscache
-*.sln.docstates
-
-# Rider
-.idea/
-
-# NuGet
-*.nupkg
-*.snupkg
-packages/
-!**/packages/build/
-project.lock.json
-project.fragment.lock.json
-artifacts/
-
-# .NET
-*.dll
-*.exe
-!publish.bat
-
-# Logs
 *.log
-build.log
-build.txt
-build_app.txt
-build_core.txt
-winui.txt
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 
-# OS
 .DS_Store
 Thumbs.db
-desktop.ini
 
-# SQLite database (runtime data)
-*.db
-*.db-shm
-*.db-wal
+.idea/
+.vscode/
 
-# App local data
-AppData/
-
-# Publish artifacts
-publish/
+coverage/
