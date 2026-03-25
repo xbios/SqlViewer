@@ -1,6 +1,6 @@
 {
   "name": "sql-viewer-desktop",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Desktop app for browsing SQL files in a selected folder.",
   "main": "main.js",
   "scripts": {

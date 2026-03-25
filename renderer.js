@@ -1,8 +1,10 @@
 const pickFolderButton = document.getElementById("pick-folder-button");
+const refreshFolderButton = document.getElementById("refresh-folder-button");
 const appShellElement = document.querySelector(".app-shell");
 const panelResizerElement = document.getElementById("panel-resizer");
 const folderPathElement = document.getElementById("folder-path");
 const folderListElement = document.getElementById("folder-list");
+const statusSelectedFolderElement = document.getElementById("status-selected-folder");
 const fileCountElement = document.getElementById("file-count");
 const fileListElement = document.getElementById("file-list");
 const activeFileNameElement = document.getElementById("active-file-name");
@@ -71,6 +73,7 @@ const sqlKeywords = new Set([
 
 let selectedFilePath = null;
 let selectedFolderPath = null;
+let selectedRootPath = null;
 let isResizingPanels = false;
 let originalSqlContent = "";
 let isCollapsedView = false;
@@ -169,9 +172,15 @@ function setToolButtonState(button, isActive) {
   button.classList.toggle("active", isActive);
 }
 
+function updateStatusBar() {
+  const statusText = selectedFolderPath || "Henuz klasor secilmedi.";
+  statusSelectedFolderElement.textContent = `Secilen klasor: ${statusText}`;
+}
+
 function updateToolButtons() {
   const hasFile = Boolean(selectedFilePath);
   const canSaveFormatted = hasFile && isCollapsedView && Boolean(lastCollapsedSqlContent);
+  refreshFolderButton.disabled = !selectedRootPath;
   toggleCollapseButton.disabled = !hasFile;
   saveFormattedButton.disabled = !canSaveFormatted;
   openNotepadButton.disabled = !hasFile;
@@ -194,6 +203,7 @@ function setEmptyFileState(message) {
   lastCollapsedSqlContent = "";
   activeFileNameElement.textContent = "Bir dosya sec";
   renderCodeContent(message);
+  updateStatusBar();
   updateToolButtons();
 }
 
@@ -311,6 +321,7 @@ async function loadFolderFiles(folderPath) {
   selectedFolderPath = folderPath;
   selectedFilePath = null;
   folderPathElement.textContent = folderPath;
+  updateStatusBar();
   fileCountElement.textContent = "Yukleniyor...";
   renderFileList([]);
   setEmptyFileState("Listeden bir SQL dosyasina tiklayarak icerigini goruntule.");
@@ -329,6 +340,22 @@ async function refreshCurrentFolderFileList() {
   const result = await window.sqlViewer.listFolderFiles(selectedFolderPath);
   fileCountElement.textContent = `${result.files.length} dosya`;
   renderFileList(result.files);
+}
+
+async function refreshSelectedFolderContext() {
+  if (!selectedRootPath || !selectedFolderPath) {
+    return;
+  }
+
+  folderPathElement.textContent = selectedFolderPath;
+  updateStatusBar();
+  fileCountElement.textContent = "Yukleniyor...";
+  fileListElement.classList.remove("empty");
+  fileListElement.textContent = "Dosyalar yenileniyor...";
+
+  const folderResult = await window.sqlViewer.listFolders(selectedRootPath);
+  renderFolderList(folderResult.folders);
+  await loadFolderFiles(selectedFolderPath);
 }
 
 function renderFolderList(folders) {
@@ -435,8 +462,10 @@ pickFolderButton.addEventListener("click", async () => {
       return;
     }
 
+    selectedRootPath = result.rootPath;
     selectedFolderPath = result.selectedFolderPath;
     folderPathElement.textContent = result.selectedFolderPath;
+    updateStatusBar();
     renderFolderList(result.folders);
     fileCountElement.textContent = `${result.files.length} dosya`;
     renderFileList(result.files);
@@ -451,6 +480,22 @@ pickFolderButton.addEventListener("click", async () => {
     fileListElement.textContent =
       "Klasor secilirken bir hata olustu: " + error.message;
     setEmptyFileState("Bir hata olustu.");
+  }
+});
+
+refreshFolderButton.addEventListener("click", async () => {
+  if (!selectedRootPath || !selectedFolderPath) {
+    return;
+  }
+
+  try {
+    await refreshSelectedFolderContext();
+  } catch (error) {
+    fileCountElement.textContent = "0 dosya";
+    renderFileList([]);
+    setEmptyFileState("Bir hata olustu.");
+    folderPathElement.textContent =
+      "Klasor yenilenirken bir hata olustu: " + error.message;
   }
 });
 
@@ -544,3 +589,4 @@ window.addEventListener("resize", () => {
 });
 
 updateToolButtons();
+updateStatusBar();

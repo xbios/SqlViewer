@@ -16,9 +16,21 @@
             Bir klasor sec, icindeki SQL dosyalarini listeleyelim ve tek tikla
             icerigini gorelim.
           </p> -->
-          <button id="pick-folder-button" class="primary-button" type="button">
-            Klasor Sec
-          </button>
+          <div class="sidebar-actions">
+            <button id="pick-folder-button" class="primary-button" type="button">
+              Klasor Sec
+            </button>
+            <button
+              id="refresh-folder-button"
+              class="sidebar-tool-button"
+              type="button"
+              title="Secili klasoru yenile"
+              aria-label="Secili klasoru yenile"
+              disabled
+            >
+              <span aria-hidden="true">&#10227;</span>
+            </button>
+          </div>
         </div>
 
         <div class="folder-panel">
@@ -114,6 +126,14 @@
         ><code>Secilen SQL dosyasinin icerigi burada gorunecek.</code></pre>
       </main>
     </div>
+
+    <footer class="status-bar">
+      <div id="status-selected-folder" class="status-cell">
+        Secilen klasor: Henuz klasor secilmedi.
+      </div>
+      <div class="status-cell status-cell-center"></div>
+      <div class="status-cell status-cell-right">Version 1.0.1</div>
+    </footer>
 
     <script src="renderer.js"></script>
   </body>

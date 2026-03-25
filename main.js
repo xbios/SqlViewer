@@ -162,6 +162,18 @@ ipcMain.handle("list-folder-files", async (_event, folderPath) => {
   };
 });
 
+ipcMain.handle("list-folders", async (_event, rootPath) => {
+  const folders = [
+    { name: path.basename(rootPath) || rootPath, path: rootPath },
+    ...(await getFolders(rootPath))
+  ];
+
+  return {
+    rootPath,
+    folders
+  };
+});
+
 ipcMain.handle("read-sql-file", async (_event, filePath) => {
   const content = await fs.readFile(filePath, "utf8");
   return {
