@@ -78,6 +78,25 @@ async function getFolders(rootPath, currentPath = rootPath) {
   return folders;
 }
 
+async function getNextAvailableSqlPath(filePath) {
+  const parsedPath = path.parse(filePath);
+  let index = 1;
+
+  while (true) {
+    const candidatePath = path.join(
+      parsedPath.dir,
+      `${parsedPath.name} (${index})${parsedPath.ext}`
+    );
+
+    try {
+      await fs.access(candidatePath);
+      index += 1;
+    } catch {
+      return candidatePath;
+    }
+  }
+}
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 1280,
@@ -148,6 +167,18 @@ ipcMain.handle("read-sql-file", async (_event, filePath) => {
   return {
     filePath,
     content
+  };
+});
+
+ipcMain.handle("save-sql-file", async (_event, filePath, content) => {
+  const nextFilePath = await getNextAvailableSqlPath(filePath);
+  await fs.writeFile(nextFilePath, content, "utf8");
+  const stats = await fs.stat(nextFilePath);
+
+  return {
+    filePath: nextFilePath,
+    fileName: path.basename(nextFilePath),
+    modifiedAt: stats.mtime.toISOString()
   };
 });
 

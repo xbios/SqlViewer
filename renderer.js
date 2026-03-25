@@ -8,6 +8,7 @@ const fileListElement = document.getElementById("file-list");
 const activeFileNameElement = document.getElementById("active-file-name");
 const fileContentElement = document.getElementById("file-content");
 const toggleCollapseButton = document.getElementById("toggle-collapse-button");
+const saveFormattedButton = document.getElementById("save-formatted-button");
 const openNotepadButton = document.getElementById("open-notepad-button");
 const openSsmsButton = document.getElementById("open-ssms-button");
 const openFolderButton = document.getElementById("open-folder-button");
@@ -73,6 +74,7 @@ let selectedFolderPath = null;
 let isResizingPanels = false;
 let originalSqlContent = "";
 let isCollapsedView = false;
+let lastCollapsedSqlContent = "";
 const dateFormatter = new Intl.DateTimeFormat("tr-TR", {
   dateStyle: "short",
   timeStyle: "short"
@@ -169,11 +171,14 @@ function setToolButtonState(button, isActive) {
 
 function updateToolButtons() {
   const hasFile = Boolean(selectedFilePath);
+  const canSaveFormatted = hasFile && isCollapsedView && Boolean(lastCollapsedSqlContent);
   toggleCollapseButton.disabled = !hasFile;
+  saveFormattedButton.disabled = !canSaveFormatted;
   openNotepadButton.disabled = !hasFile;
   openSsmsButton.disabled = !hasFile;
   openFolderButton.disabled = !hasFile;
   setToolButtonState(toggleCollapseButton, hasFile && isCollapsedView);
+  setToolButtonState(saveFormattedButton, canSaveFormatted);
   toggleCollapseButton.title = isCollapsedView
     ? "Normal gorunume don"
     : "Collapsed format";
@@ -186,6 +191,7 @@ function updateToolButtons() {
 function setEmptyFileState(message) {
   originalSqlContent = "";
   isCollapsedView = false;
+  lastCollapsedSqlContent = "";
   activeFileNameElement.textContent = "Bir dosya sec";
   renderCodeContent(message);
   updateToolButtons();
@@ -258,14 +264,18 @@ function renderSelectedSqlContent() {
   }
 
   if (!isCollapsedView) {
+    lastCollapsedSqlContent = "";
     renderCodeContent(originalSqlContent);
+    updateToolButtons();
     return;
   }
 
   try {
-    renderCodeContent(collapseSqlContent(originalSqlContent));
+    lastCollapsedSqlContent = collapseSqlContent(originalSqlContent);
+    renderCodeContent(lastCollapsedSqlContent);
   } catch {
     isCollapsedView = false;
+    lastCollapsedSqlContent = "";
     renderCodeContent(originalSqlContent);
   } finally {
     updateToolButtons();
@@ -284,6 +294,16 @@ async function loadFolderFiles(folderPath) {
   fileCountElement.textContent = `${result.files.length} dosya`;
   renderFileList(result.files);
   updateToolButtons();
+}
+
+async function refreshCurrentFolderFileList() {
+  if (!selectedFolderPath) {
+    return;
+  }
+
+  const result = await window.sqlViewer.listFolderFiles(selectedFolderPath);
+  fileCountElement.textContent = `${result.files.length} dosya`;
+  renderFileList(result.files);
 }
 
 function renderFolderList(folders) {
@@ -355,6 +375,7 @@ function renderFileList(files) {
       activeFileNameElement.textContent = file.name;
       originalSqlContent = "";
       isCollapsedView = false;
+      lastCollapsedSqlContent = "";
       updateToolButtons();
       renderCodeContent("Yukleniyor...");
 
@@ -362,10 +383,12 @@ function renderFileList(files) {
         const result = await window.sqlViewer.readSqlFile(file.path);
         originalSqlContent = result.content || "";
         isCollapsedView = false;
+        lastCollapsedSqlContent = "";
         renderSelectedSqlContent();
       } catch (error) {
         originalSqlContent = "";
         isCollapsedView = false;
+        lastCollapsedSqlContent = "";
         renderCodeContent("Dosya okunurken bir hata olustu: " + error.message);
         updateToolButtons();
       }
@@ -413,6 +436,28 @@ toggleCollapseButton.addEventListener("click", () => {
 
   isCollapsedView = !isCollapsedView;
   renderSelectedSqlContent();
+});
+
+saveFormattedButton.addEventListener("click", async () => {
+  if (!selectedFilePath || !isCollapsedView || !lastCollapsedSqlContent) {
+    return;
+  }
+
+  try {
+    const result = await window.sqlViewer.saveSqlFile(
+      selectedFilePath,
+      lastCollapsedSqlContent
+    );
+    selectedFilePath = result.filePath;
+    originalSqlContent = lastCollapsedSqlContent;
+    isCollapsedView = false;
+    lastCollapsedSqlContent = "";
+    activeFileNameElement.textContent = result.fileName;
+    await refreshCurrentFolderFileList();
+    renderSelectedSqlContent();
+  } catch (error) {
+    renderCodeContent("Formatli icerik kaydedilirken bir hata olustu: " + error.message);
+  }
 });
 
 openNotepadButton.addEventListener("click", async () => {
