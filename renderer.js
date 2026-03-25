@@ -6,6 +6,7 @@ const folderPathElement = document.getElementById("folder-path");
 const folderListElement = document.getElementById("folder-list");
 const statusSelectedFolderElement = document.getElementById("status-selected-folder");
 const fileCountElement = document.getElementById("file-count");
+const fileSearchInput = document.getElementById("file-search-input");
 const fileListElement = document.getElementById("file-list");
 const activeFileNameElement = document.getElementById("active-file-name");
 const fileContentElement = document.getElementById("file-content");
@@ -78,6 +79,7 @@ let isResizingPanels = false;
 let originalSqlContent = "";
 let isCollapsedView = false;
 let lastCollapsedSqlContent = "";
+let currentFiles = [];
 const formatterIndent = "    ";
 const dateFormatter = new Intl.DateTimeFormat("tr-TR", {
   dateStyle: "short",
@@ -170,6 +172,58 @@ function renderCodeContent(content) {
 
 function setToolButtonState(button, isActive) {
   button.classList.toggle("active", isActive);
+}
+
+function normalizeSearch(value) {
+  return value.toLocaleLowerCase("tr").trim();
+}
+
+function getSearchRank(fileName, query) {
+  const normalizedFileName = normalizeSearch(fileName);
+
+  if (!query) {
+    return Number.MAX_SAFE_INTEGER;
+  }
+
+  if (normalizedFileName.startsWith(query)) {
+    return 0;
+  }
+
+  const includesIndex = normalizedFileName.indexOf(query);
+  if (includesIndex !== -1) {
+    return 100 + includesIndex;
+  }
+
+  return Number.MAX_SAFE_INTEGER;
+}
+
+function focusClosestSearchMatch(shouldFocus = false) {
+  const query = normalizeSearch(fileSearchInput.value);
+
+  if (!query || currentFiles.length === 0) {
+    document
+      .querySelectorAll(".file-item.search-match")
+      .forEach((item) => item.classList.remove("search-match"));
+    return;
+  }
+
+  const rankedFiles = [...currentFiles]
+    .map((file) => ({ file, rank: getSearchRank(file.name, query) }))
+    .filter((entry) => entry.rank !== Number.MAX_SAFE_INTEGER)
+    .sort((a, b) => a.rank - b.rank || a.file.name.localeCompare(b.file.name, "tr"));
+
+  const bestMatch = rankedFiles[0]?.file;
+  const buttons = document.querySelectorAll(".file-item");
+
+  buttons.forEach((button) => {
+    const isMatch = button.dataset.filePath === bestMatch?.path;
+    button.classList.toggle("search-match", isMatch);
+
+    if (isMatch && shouldFocus) {
+      button.focus({ preventScroll: false });
+      button.scrollIntoView({ block: "nearest" });
+    }
+  });
 }
 
 function updateStatusBar() {
@@ -322,11 +376,13 @@ async function loadFolderFiles(folderPath) {
   selectedFilePath = null;
   folderPathElement.textContent = folderPath;
   updateStatusBar();
+  await window.sqlViewer.saveSelectedFolder(selectedRootPath, selectedFolderPath);
   fileCountElement.textContent = "Yukleniyor...";
   renderFileList([]);
   setEmptyFileState("Listeden bir SQL dosyasina tiklayarak icerigini goruntule.");
 
   const result = await window.sqlViewer.listFolderFiles(folderPath);
+  currentFiles = result.files;
   fileCountElement.textContent = `${result.files.length} dosya`;
   renderFileList(result.files);
   updateToolButtons();
@@ -338,6 +394,7 @@ async function refreshCurrentFolderFileList() {
   }
 
   const result = await window.sqlViewer.listFolderFiles(selectedFolderPath);
+  currentFiles = result.files;
   fileCountElement.textContent = `${result.files.length} dosya`;
   renderFileList(result.files);
 }
@@ -399,20 +456,28 @@ function renderFolderList(folders) {
   });
 }
 
-function renderFileList(files) {
+function renderFileList(files, shouldFocusMatch = false) {
+  currentFiles = files;
   fileListElement.innerHTML = "";
   fileListElement.classList.remove("empty");
+  const query = normalizeSearch(fileSearchInput.value);
+  const visibleFiles = query
+    ? files.filter((file) => getSearchRank(file.name, query) !== Number.MAX_SAFE_INTEGER)
+    : files;
 
-  if (files.length === 0) {
+  if (visibleFiles.length === 0) {
     fileListElement.classList.add("empty");
-    fileListElement.textContent = "Bu klasorde `.sql` dosyasi bulunamadi.";
+    fileListElement.textContent = query
+      ? "Aramaya uygun `.sql` dosyasi bulunamadi."
+      : "Bu klasorde `.sql` dosyasi bulunamadi.";
     return;
   }
 
-  files.forEach((file) => {
+  visibleFiles.forEach((file) => {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "file-item";
+    button.dataset.filePath = file.path;
     button.innerHTML = `
       <span class="file-item-name">${file.name}</span>
       <span class="file-item-date">${dateFormatter.format(new Date(file.modifiedAt))}</span>
@@ -452,6 +517,8 @@ function renderFileList(files) {
 
     fileListElement.appendChild(button);
   });
+
+  focusClosestSearchMatch(shouldFocusMatch);
 }
 
 pickFolderButton.addEventListener("click", async () => {
@@ -466,6 +533,7 @@ pickFolderButton.addEventListener("click", async () => {
     selectedFolderPath = result.selectedFolderPath;
     folderPathElement.textContent = result.selectedFolderPath;
     updateStatusBar();
+    await window.sqlViewer.saveSelectedFolder(selectedRootPath, selectedFolderPath);
     renderFolderList(result.folders);
     fileCountElement.textContent = `${result.files.length} dosya`;
     renderFileList(result.files);
@@ -481,6 +549,19 @@ pickFolderButton.addEventListener("click", async () => {
       "Klasor secilirken bir hata olustu: " + error.message;
     setEmptyFileState("Bir hata olustu.");
   }
+});
+
+fileSearchInput.addEventListener("input", () => {
+  renderFileList(currentFiles, false);
+});
+
+fileSearchInput.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter") {
+    return;
+  }
+
+  event.preventDefault();
+  renderFileList(currentFiles, true);
 });
 
 refreshFolderButton.addEventListener("click", async () => {
@@ -588,5 +669,28 @@ window.addEventListener("resize", () => {
   }
 });
 
+async function restoreLastSession() {
+  try {
+    const lastSession = await window.sqlViewer.loadLastSession();
+
+    if (!lastSession) {
+      return;
+    }
+
+    selectedRootPath = lastSession.rootPath;
+    selectedFolderPath = lastSession.selectedFolderPath;
+    folderPathElement.textContent = lastSession.selectedFolderPath;
+    updateStatusBar();
+    renderFolderList(lastSession.folders);
+    fileCountElement.textContent = `${lastSession.files.length} dosya`;
+    renderFileList(lastSession.files);
+    setEmptyFileState("Listeden bir SQL dosyasina tiklayarak icerigini goruntule.");
+    updateToolButtons();
+  } catch {
+    // Ignore restore errors and let the app start with empty state.
+  }
+}
+
 updateToolButtons();
 updateStatusBar();
+restoreLastSession();

@@ -28,7 +28,7 @@ Not:
 
 Windows .ico için, ImageMagick kuruluysa:
 
-magick build/dt.png -define icon:auto-resize=256,128,64,48,32,16 build/icon.ico
+magick build/sdv.png -define icon:auto-resize=256,128,64,48,32,16 build/icon.ico
 
 macOS .icns için, macOS üzerinde:
 

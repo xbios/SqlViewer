@@ -2,6 +2,7 @@ const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
 const fs = require("fs/promises");
 const path = require("path");
 const { spawn } = require("child_process");
+const settingsFilePath = () => path.join(app.getPath("userData"), "settings.ini");
 
 async function findSsmsExecutable() {
   const programFiles = process.env.ProgramFiles || "C:\\Program Files";
@@ -97,6 +98,59 @@ async function getNextAvailableSqlPath(filePath) {
   }
 }
 
+function parseIni(content) {
+  const result = {};
+
+  content
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith(";") && !line.startsWith("#"))
+    .forEach((line) => {
+      const separatorIndex = line.indexOf("=");
+
+      if (separatorIndex === -1) {
+        return;
+      }
+
+      const key = line.slice(0, separatorIndex).trim();
+      const value = line.slice(separatorIndex + 1).trim();
+      result[key] = value;
+    });
+
+  return result;
+}
+
+async function readSettings() {
+  try {
+    const content = await fs.readFile(settingsFilePath(), "utf8");
+    return parseIni(content);
+  } catch {
+    return {};
+  }
+}
+
+async function writeSettings(settings) {
+  const content = Object.entries(settings)
+    .map(([key, value]) => `${key}=${value ?? ""}`)
+    .join("\n");
+  await fs.writeFile(settingsFilePath(), content, "utf8");
+}
+
+async function buildFolderPayload(rootPath, selectedFolderPath = rootPath) {
+  const files = await getSqlFiles(selectedFolderPath);
+  const folders = [
+    { name: path.basename(rootPath) || rootPath, path: rootPath },
+    ...(await getFolders(rootPath))
+  ];
+
+  return {
+    rootPath,
+    selectedFolderPath,
+    folders,
+    files
+  };
+}
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 1280,
@@ -140,18 +194,12 @@ ipcMain.handle("pick-folder", async () => {
   }
 
   const folderPath = result.filePaths[0];
-  const files = await getSqlFiles(folderPath);
-  const folders = [
-    { name: path.basename(folderPath) || folderPath, path: folderPath },
-    ...(await getFolders(folderPath))
-  ];
-
-  return {
+  await writeSettings({
     rootPath: folderPath,
-    selectedFolderPath: folderPath,
-    folders,
-    files
-  };
+    selectedFolderPath: folderPath
+  });
+
+  return buildFolderPayload(folderPath, folderPath);
 });
 
 ipcMain.handle("list-folder-files", async (_event, folderPath) => {
@@ -172,6 +220,33 @@ ipcMain.handle("list-folders", async (_event, rootPath) => {
     rootPath,
     folders
   };
+});
+
+ipcMain.handle("save-selected-folder", async (_event, rootPath, selectedFolderPath) => {
+  await writeSettings({
+    rootPath,
+    selectedFolderPath
+  });
+
+  return { ok: true };
+});
+
+ipcMain.handle("load-last-session", async () => {
+  const settings = await readSettings();
+  const rootPath = settings.rootPath;
+  const selectedFolderPath = settings.selectedFolderPath || rootPath;
+
+  if (!rootPath) {
+    return null;
+  }
+
+  try {
+    await fs.access(rootPath);
+    await fs.access(selectedFolderPath);
+    return await buildFolderPayload(rootPath, selectedFolderPath);
+  } catch {
+    return null;
+  }
 });
 
 ipcMain.handle("read-sql-file", async (_event, filePath) => {
