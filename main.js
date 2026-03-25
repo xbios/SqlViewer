@@ -2,6 +2,51 @@ const { app, BrowserWindow, dialog, ipcMain } = require("electron");
 const fs = require("fs/promises");
 const path = require("path");
 
+async function getSqlFiles(folderPath) {
+  const entries = await fs.readdir(folderPath, { withFileTypes: true });
+  const sqlEntries = entries.filter(
+    (entry) => entry.isFile() && entry.name.toLowerCase().endsWith(".sql")
+  );
+  const files = await Promise.all(
+    sqlEntries.map(async (entry) => {
+      const filePath = path.join(folderPath, entry.name);
+      const stats = await fs.stat(filePath);
+
+      return {
+        name: entry.name,
+        path: filePath,
+        modifiedAt: stats.mtime.toISOString()
+      };
+    })
+  );
+
+  files.sort((a, b) => new Date(b.modifiedAt) - new Date(a.modifiedAt));
+  return files;
+}
+
+async function getFolders(rootPath, currentPath = rootPath) {
+  const entries = await fs.readdir(currentPath, { withFileTypes: true });
+  const folders = [];
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) {
+      continue;
+    }
+
+    const folderPath = path.join(currentPath, entry.name);
+    folders.push({
+      name: path.relative(rootPath, folderPath) || path.basename(folderPath),
+      path: folderPath
+    });
+
+    const childFolders = await getFolders(rootPath, folderPath);
+    folders.push(...childFolders);
+  }
+
+  folders.sort((a, b) => a.name.localeCompare(b.name, "tr"));
+  return folders;
+}
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 1280,
@@ -45,25 +90,22 @@ ipcMain.handle("pick-folder", async () => {
   }
 
   const folderPath = result.filePaths[0];
-  const entries = await fs.readdir(folderPath, { withFileTypes: true });
-  const sqlEntries = entries.filter(
-    (entry) => entry.isFile() && entry.name.toLowerCase().endsWith(".sql")
-  );
-  const files = await Promise.all(
-    sqlEntries.map(async (entry) => {
-      const filePath = path.join(folderPath, entry.name);
-      const stats = await fs.stat(filePath);
+  const files = await getSqlFiles(folderPath);
+  const folders = [
+    { name: path.basename(folderPath) || folderPath, path: folderPath },
+    ...(await getFolders(folderPath))
+  ];
 
-      return {
-        name: entry.name,
-        path: filePath,
-        modifiedAt: stats.mtime.toISOString()
-      };
-    })
-  );
+  return {
+    rootPath: folderPath,
+    selectedFolderPath: folderPath,
+    folders,
+    files
+  };
+});
 
-  files.sort((a, b) => new Date(b.modifiedAt) - new Date(a.modifiedAt));
-
+ipcMain.handle("list-folder-files", async (_event, folderPath) => {
+  const files = await getSqlFiles(folderPath);
   return {
     folderPath,
     files

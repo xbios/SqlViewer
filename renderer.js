@@ -1,5 +1,6 @@
 const pickFolderButton = document.getElementById("pick-folder-button");
 const folderPathElement = document.getElementById("folder-path");
+const folderListElement = document.getElementById("folder-list");
 const fileCountElement = document.getElementById("file-count");
 const fileListElement = document.getElementById("file-list");
 const activeFileNameElement = document.getElementById("active-file-name");
@@ -62,6 +63,7 @@ const sqlKeywords = new Set([
 ]);
 
 let selectedFilePath = null;
+let selectedFolderPath = null;
 const dateFormatter = new Intl.DateTimeFormat("tr-TR", {
   dateStyle: "short",
   timeStyle: "short"
@@ -108,6 +110,60 @@ function renderCodeContent(content) {
 function setEmptyFileState(message) {
   activeFileNameElement.textContent = "Bir dosya sec";
   renderCodeContent(message);
+}
+
+async function loadFolderFiles(folderPath) {
+  selectedFolderPath = folderPath;
+  selectedFilePath = null;
+  folderPathElement.textContent = folderPath;
+  fileCountElement.textContent = "Yukleniyor...";
+  renderFileList([]);
+  setEmptyFileState("Listeden bir SQL dosyasina tiklayarak icerigini goruntule.");
+
+  const result = await window.sqlViewer.listFolderFiles(folderPath);
+  fileCountElement.textContent = `${result.files.length} dosya`;
+  renderFileList(result.files);
+}
+
+function renderFolderList(folders) {
+  folderListElement.innerHTML = "";
+  folderListElement.classList.remove("empty");
+
+  if (folders.length === 0) {
+    folderListElement.classList.add("empty");
+    folderListElement.textContent = "Alt klasor bulunamadi.";
+    return;
+  }
+
+  folders.forEach((folder) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "folder-item";
+    button.textContent = folder.name;
+
+    if (folder.path === selectedFolderPath) {
+      button.classList.add("active");
+    }
+
+    button.addEventListener("click", async () => {
+      document
+        .querySelectorAll(".folder-item.active")
+        .forEach((item) => item.classList.remove("active"));
+      button.classList.add("active");
+
+      try {
+        await loadFolderFiles(folder.path);
+      } catch (error) {
+        fileCountElement.textContent = "0 dosya";
+        renderFileList([]);
+        setEmptyFileState("Bir hata olustu.");
+        folderPathElement.textContent =
+          "Klasor okunurken bir hata olustu: " + error.message;
+      }
+    });
+
+    folderListElement.appendChild(button);
+  });
 }
 
 function renderFileList(files) {
@@ -162,13 +218,17 @@ pickFolderButton.addEventListener("click", async () => {
       return;
     }
 
-    selectedFilePath = null;
-    folderPathElement.textContent = result.folderPath;
+    selectedFolderPath = result.selectedFolderPath;
+    folderPathElement.textContent = result.selectedFolderPath;
+    renderFolderList(result.folders);
     fileCountElement.textContent = `${result.files.length} dosya`;
     renderFileList(result.files);
     setEmptyFileState("Listeden bir SQL dosyasina tiklayarak icerigini goruntule.");
   } catch (error) {
     folderPathElement.textContent = "Klasor okunamadi.";
+    folderListElement.classList.add("empty");
+    folderListElement.textContent =
+      "Klasor secilirken bir hata olustu: " + error.message;
     fileCountElement.textContent = "0 dosya";
     fileListElement.classList.add("empty");
     fileListElement.textContent =

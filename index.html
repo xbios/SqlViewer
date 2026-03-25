@@ -1,11 +1,8 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="tr">
   <head>
     <meta charset="UTF-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0"
-    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SQL Viewer</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
@@ -15,10 +12,10 @@
         <div class="sidebar-top">
           <p class="eyebrow">Desktop SQL Viewer</p>
           <h1>SQL Dosyalarini Incele</h1>
-          <p class="sidebar-copy">
+          <!-- <p class="sidebar-copy">
             Bir klasor sec, icindeki SQL dosyalarini listeleyelim ve tek tikla
             icerigini gorelim.
-          </p>
+          </p> -->
           <button id="pick-folder-button" class="primary-button" type="button">
             Klasor Sec
           </button>
@@ -27,6 +24,9 @@
         <div class="folder-panel">
           <p class="panel-label">Secilen Klasor</p>
           <p id="folder-path" class="folder-path">Henuz klasor secilmedi.</p>
+          <div id="folder-list" class="folder-list empty">
+            Ana klasor ve alt klasorler burada listelenecek.
+          </div>
         </div>
 
         <div class="file-list-panel">
@@ -48,7 +48,10 @@
           </div>
         </div>
 
-        <pre id="file-content" class="code-viewer"><code>Secilen SQL dosyasinin icerigi burada gorunecek.</code></pre>
+        <pre
+          id="file-content"
+          class="code-viewer"
+        ><code>Secilen SQL dosyasinin icerigi burada gorunecek.</code></pre>
       </main>
     </div>
 
