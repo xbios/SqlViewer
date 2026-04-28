@@ -13,6 +13,20 @@ npm install
 npm start
 ```
 
+Windows icin init dosyasi:
+
+```powershell
+.\init.ps1
+.\init.ps1 -Task start -SkipInstall
+```
+
+PowerShell script calistirmayi engellerse:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\init.ps1
+powershell -ExecutionPolicy Bypass -File .\init.ps1 -Task start -SkipInstall
+```
+
 ## Build Alma
 
 Windows paketi:

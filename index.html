@@ -11,35 +11,31 @@
       <aside class="sidebar">
         <div class="sidebar-top">
           <p class="eyebrow">Desktop SQL Viewer</p>
-          <h1>SQL Dosyalarini Incele</h1>
-          <!-- <p class="sidebar-copy">
-            Bir klasor sec, icindeki SQL dosyalarini listeleyelim ve tek tikla
-            icerigini gorelim.
-          </p> -->
-          <div class="sidebar-actions">
-            <button
-              id="pick-folder-button"
-              class="primary-button"
-              type="button"
-            >
-              Klasor Sec
-            </button>
-            <button
-              id="refresh-folder-button"
-              class="sidebar-tool-button"
-              type="button"
-              title="Secili klasoru yenile"
-              aria-label="Secili klasoru yenile"
-              disabled
-            >
-              <span aria-hidden="true">&#10227;</span>
-            </button>
-          </div>
         </div>
 
         <div class="folder-panel">
-          <p class="panel-label">Secilen Klasor</p>
-          <p id="folder-path" class="folder-path">Henuz klasor secilmedi.</p>
+          <div class="folder-panel-header">
+            <p class="panel-label">Secilen Klasor</p>
+            <div class="folder-actions">
+              <button
+                id="pick-folder-button"
+                class="folder-pick-button"
+                type="button"
+              >
+                Klasor Sec
+              </button>
+              <button
+                id="refresh-folder-button"
+                class="folder-tool-button"
+                type="button"
+                title="Secili klasoru yenile"
+                aria-label="Secili klasoru yenile"
+                disabled
+              >
+                <span aria-hidden="true">&#10227;</span>
+              </button>
+            </div>
+          </div>
           <div id="folder-list" class="folder-list empty">
             Ana klasor ve alt klasorler burada listelenecek.
           </div>
@@ -54,7 +50,7 @@
             id="file-search-input"
             class="file-search-input"
             type="text"
-            placeholder="Dosya ara..."
+            placeholder="Dosya veya icerik ara..."
             autocomplete="off"
             spellcheck="false"
           />

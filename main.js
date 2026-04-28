@@ -34,25 +34,39 @@ async function findSsmsExecutable() {
   throw new Error("SSMS bulunamadi. SQL Server Management Studio kurulu olmayabilir.");
 }
 
-async function getSqlFiles(folderPath) {
+async function getSqlFiles(folderPath, rootPath = folderPath) {
   const entries = await fs.readdir(folderPath, { withFileTypes: true });
-  const sqlEntries = entries.filter(
-    (entry) => entry.isFile() && entry.name.toLowerCase().endsWith(".sql")
-  );
-  const files = await Promise.all(
-    sqlEntries.map(async (entry) => {
-      const filePath = path.join(folderPath, entry.name);
-      const stats = await fs.stat(filePath);
+  const files = [];
 
-      return {
-        name: entry.name,
-        path: filePath,
-        modifiedAt: stats.mtime.toISOString()
-      };
-    })
-  );
+  for (const entry of entries) {
+    const filePath = path.join(folderPath, entry.name);
 
-  files.sort((a, b) => new Date(b.modifiedAt) - new Date(a.modifiedAt));
+    if (entry.isDirectory()) {
+      const childFiles = await getSqlFiles(filePath, rootPath);
+      files.push(...childFiles);
+      continue;
+    }
+
+    if (!entry.isFile() || !entry.name.toLowerCase().endsWith(".sql")) {
+      continue;
+    }
+
+    const stats = await fs.stat(filePath);
+    const relativePath = path.relative(rootPath, filePath);
+
+    files.push({
+      name: entry.name,
+      displayName: relativePath || entry.name,
+      path: filePath,
+      modifiedAt: stats.mtime.toISOString()
+    });
+  }
+
+  files.sort((a, b) => {
+    const modifiedDiff = new Date(b.modifiedAt) - new Date(a.modifiedAt);
+    return modifiedDiff || a.displayName.localeCompare(b.displayName, "tr");
+  });
+
   return files;
 }
 

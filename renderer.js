@@ -2,7 +2,6 @@ const pickFolderButton = document.getElementById("pick-folder-button");
 const refreshFolderButton = document.getElementById("refresh-folder-button");
 const appShellElement = document.querySelector(".app-shell");
 const panelResizerElement = document.getElementById("panel-resizer");
-const folderPathElement = document.getElementById("folder-path");
 const folderListElement = document.getElementById("folder-list");
 const statusSelectedFolderElement = document.getElementById("status-selected-folder");
 const fileCountElement = document.getElementById("file-count");
@@ -80,6 +79,10 @@ let originalSqlContent = "";
 let isCollapsedView = false;
 let lastCollapsedSqlContent = "";
 let currentFiles = [];
+let currentSearchMatches = new Map();
+let fileContentSearchCache = new Map();
+let searchDebounceId = null;
+let activeSearchRunId = 0;
 const formatterIndent = "    ";
 const dateFormatter = new Intl.DateTimeFormat("tr-TR", {
   dateStyle: "short",
@@ -197,6 +200,113 @@ function getSearchRank(fileName, query) {
   return Number.MAX_SAFE_INTEGER;
 }
 
+function getFileNameSearchMatch(fileName, query) {
+  return getSearchRank(fileName, query) !== Number.MAX_SAFE_INTEGER;
+}
+
+async function getNormalizedFileContent(file) {
+  if (fileContentSearchCache.has(file.path)) {
+    return fileContentSearchCache.get(file.path);
+  }
+
+  try {
+    const result = await window.sqlViewer.readSqlFile(file.path);
+    const normalizedContent = normalizeSearch(result.content || "");
+    fileContentSearchCache.set(file.path, normalizedContent);
+    return normalizedContent;
+  } catch {
+    fileContentSearchCache.set(file.path, "");
+    return "";
+  }
+}
+
+async function buildSearchMatches(files, query, runId) {
+  const entries = await Promise.all(
+    files.map(async (file) => {
+      const nameMatch = getFileNameSearchMatch(file.displayName || file.name, query);
+      const normalizedContent = await getNormalizedFileContent(file);
+      const contentMatch = normalizedContent.includes(query);
+
+      return [file.path, { nameMatch, contentMatch }];
+    })
+  );
+
+  if (runId !== activeSearchRunId) {
+    return null;
+  }
+
+  return new Map(entries);
+}
+
+function getSearchMatchLabel(match) {
+  if (!match) {
+    return "";
+  }
+
+  if (match.nameMatch && match.contentMatch) {
+    return "Ad + Icerik";
+  }
+
+  if (match.contentMatch) {
+    return "Icerik";
+  }
+
+  if (match.nameMatch) {
+    return "Ad";
+  }
+
+  return "";
+}
+
+function getSearchMatchClass(match) {
+  if (!match) {
+    return "";
+  }
+
+  if (match.nameMatch && match.contentMatch) {
+    return "match-both";
+  }
+
+  if (match.contentMatch) {
+    return "match-content";
+  }
+
+  if (match.nameMatch) {
+    return "match-name";
+  }
+
+  return "";
+}
+
+function scheduleFileSearch(shouldFocusMatch = false) {
+  window.clearTimeout(searchDebounceId);
+  searchDebounceId = window.setTimeout(() => {
+    runFileSearch(shouldFocusMatch);
+  }, 180);
+}
+
+async function runFileSearch(shouldFocusMatch = false) {
+  const query = normalizeSearch(fileSearchInput.value);
+  const runId = activeSearchRunId + 1;
+  activeSearchRunId = runId;
+
+  if (!query) {
+    currentSearchMatches = new Map();
+    renderFileList(currentFiles, shouldFocusMatch);
+    return;
+  }
+
+  fileCountElement.textContent = "Araniyor...";
+  const matches = await buildSearchMatches(currentFiles, query, runId);
+
+  if (!matches) {
+    return;
+  }
+
+  currentSearchMatches = matches;
+  renderFileList(currentFiles, shouldFocusMatch);
+}
+
 function focusClosestSearchMatch(shouldFocus = false) {
   const query = normalizeSearch(fileSearchInput.value);
 
@@ -208,9 +318,27 @@ function focusClosestSearchMatch(shouldFocus = false) {
   }
 
   const rankedFiles = [...currentFiles]
-    .map((file) => ({ file, rank: getSearchRank(file.name, query) }))
+    .map((file) => {
+      const match = currentSearchMatches.get(file.path);
+      const nameRank = getSearchRank(file.displayName || file.name, query);
+      const rank =
+        nameRank !== Number.MAX_SAFE_INTEGER
+          ? nameRank
+          : match?.contentMatch
+            ? 10000
+            : Number.MAX_SAFE_INTEGER;
+
+      return { file, rank };
+    })
     .filter((entry) => entry.rank !== Number.MAX_SAFE_INTEGER)
-    .sort((a, b) => a.rank - b.rank || a.file.name.localeCompare(b.file.name, "tr"));
+    .sort(
+      (a, b) =>
+        a.rank - b.rank ||
+        (a.file.displayName || a.file.name).localeCompare(
+          b.file.displayName || b.file.name,
+          "tr"
+        )
+    );
 
   const bestMatch = rankedFiles[0]?.file;
   const buttons = document.querySelectorAll(".file-item");
@@ -374,17 +502,23 @@ function renderSelectedSqlContent() {
 async function loadFolderFiles(folderPath) {
   selectedFolderPath = folderPath;
   selectedFilePath = null;
-  folderPathElement.textContent = folderPath;
+  activeSearchRunId += 1;
   updateStatusBar();
   await window.sqlViewer.saveSelectedFolder(selectedRootPath, selectedFolderPath);
   fileCountElement.textContent = "Yukleniyor...";
+  currentSearchMatches = new Map();
+  fileContentSearchCache = new Map();
   renderFileList([]);
   setEmptyFileState("Listeden bir SQL dosyasina tiklayarak icerigini goruntule.");
 
   const result = await window.sqlViewer.listFolderFiles(folderPath);
   currentFiles = result.files;
-  fileCountElement.textContent = `${result.files.length} dosya`;
-  renderFileList(result.files);
+  if (normalizeSearch(fileSearchInput.value)) {
+    await runFileSearch();
+  } else {
+    fileCountElement.textContent = `${result.files.length} dosya`;
+    renderFileList(result.files);
+  }
   updateToolButtons();
 }
 
@@ -395,8 +529,11 @@ async function refreshCurrentFolderFileList() {
 
   const result = await window.sqlViewer.listFolderFiles(selectedFolderPath);
   currentFiles = result.files;
+  currentSearchMatches = new Map();
+  fileContentSearchCache = new Map();
   fileCountElement.textContent = `${result.files.length} dosya`;
   renderFileList(result.files);
+  runFileSearch();
 }
 
 async function refreshSelectedFolderContext() {
@@ -404,7 +541,6 @@ async function refreshSelectedFolderContext() {
     return;
   }
 
-  folderPathElement.textContent = selectedFolderPath;
   updateStatusBar();
   fileCountElement.textContent = "Yukleniyor...";
   fileListElement.classList.remove("empty");
@@ -447,8 +583,6 @@ function renderFolderList(folders) {
         fileCountElement.textContent = "0 dosya";
         renderFileList([]);
         setEmptyFileState("Bir hata olustu.");
-        folderPathElement.textContent =
-          "Klasor okunurken bir hata olustu: " + error.message;
       }
     });
 
@@ -462,24 +596,41 @@ function renderFileList(files, shouldFocusMatch = false) {
   fileListElement.classList.remove("empty");
   const query = normalizeSearch(fileSearchInput.value);
   const visibleFiles = query
-    ? files.filter((file) => getSearchRank(file.name, query) !== Number.MAX_SAFE_INTEGER)
+    ? files.filter((file) => {
+        const match = currentSearchMatches.get(file.path);
+        return Boolean(match?.nameMatch || match?.contentMatch);
+      })
     : files;
+  fileCountElement.textContent = query
+    ? `${visibleFiles.length} sonuc`
+    : `${files.length} dosya`;
 
   if (visibleFiles.length === 0) {
     fileListElement.classList.add("empty");
     fileListElement.textContent = query
-      ? "Aramaya uygun `.sql` dosyasi bulunamadi."
+      ? "Dosya adinda veya icerikte sonuc bulunamadi."
       : "Bu klasorde `.sql` dosyasi bulunamadi.";
     return;
   }
 
   visibleFiles.forEach((file) => {
+    const match = currentSearchMatches.get(file.path);
+    const matchLabel = getSearchMatchLabel(match);
+    const matchClass = getSearchMatchClass(match);
+    const displayName = file.displayName || file.name;
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "file-item";
+    button.className = ["file-item", matchClass].filter(Boolean).join(" ");
     button.dataset.filePath = file.path;
     button.innerHTML = `
-      <span class="file-item-name">${file.name}</span>
+      <span class="file-item-topline">
+        <span class="file-item-name">${escapeHtml(displayName)}</span>
+        ${
+          matchLabel
+            ? `<span class="file-match-badge">${matchLabel}</span>`
+            : ""
+        }
+      </span>
       <span class="file-item-date">${dateFormatter.format(new Date(file.modifiedAt))}</span>
     `;
     button.addEventListener("click", async () => {
@@ -489,7 +640,7 @@ function renderFileList(files, shouldFocusMatch = false) {
         .forEach((item) => item.classList.remove("active"));
       button.classList.add("active");
 
-      activeFileNameElement.textContent = file.name;
+      activeFileNameElement.textContent = displayName;
       originalSqlContent = "";
       isCollapsedView = false;
       lastCollapsedSqlContent = "";
@@ -531,15 +682,20 @@ pickFolderButton.addEventListener("click", async () => {
 
     selectedRootPath = result.rootPath;
     selectedFolderPath = result.selectedFolderPath;
-    folderPathElement.textContent = result.selectedFolderPath;
     updateStatusBar();
     await window.sqlViewer.saveSelectedFolder(selectedRootPath, selectedFolderPath);
     renderFolderList(result.folders);
-    fileCountElement.textContent = `${result.files.length} dosya`;
-    renderFileList(result.files);
+    currentSearchMatches = new Map();
+    fileContentSearchCache = new Map();
+    if (normalizeSearch(fileSearchInput.value)) {
+      currentFiles = result.files;
+      await runFileSearch();
+    } else {
+      fileCountElement.textContent = `${result.files.length} dosya`;
+      renderFileList(result.files);
+    }
     setEmptyFileState("Listeden bir SQL dosyasina tiklayarak icerigini goruntule.");
   } catch (error) {
-    folderPathElement.textContent = "Klasor okunamadi.";
     folderListElement.classList.add("empty");
     folderListElement.textContent =
       "Klasor secilirken bir hata olustu: " + error.message;
@@ -552,7 +708,7 @@ pickFolderButton.addEventListener("click", async () => {
 });
 
 fileSearchInput.addEventListener("input", () => {
-  renderFileList(currentFiles, false);
+  scheduleFileSearch(false);
 });
 
 fileSearchInput.addEventListener("keydown", (event) => {
@@ -561,7 +717,7 @@ fileSearchInput.addEventListener("keydown", (event) => {
   }
 
   event.preventDefault();
-  renderFileList(currentFiles, true);
+  runFileSearch(true);
 });
 
 refreshFolderButton.addEventListener("click", async () => {
@@ -575,8 +731,6 @@ refreshFolderButton.addEventListener("click", async () => {
     fileCountElement.textContent = "0 dosya";
     renderFileList([]);
     setEmptyFileState("Bir hata olustu.");
-    folderPathElement.textContent =
-      "Klasor yenilenirken bir hata olustu: " + error.message;
   }
 });
 
@@ -679,11 +833,17 @@ async function restoreLastSession() {
 
     selectedRootPath = lastSession.rootPath;
     selectedFolderPath = lastSession.selectedFolderPath;
-    folderPathElement.textContent = lastSession.selectedFolderPath;
     updateStatusBar();
     renderFolderList(lastSession.folders);
-    fileCountElement.textContent = `${lastSession.files.length} dosya`;
-    renderFileList(lastSession.files);
+    currentSearchMatches = new Map();
+    fileContentSearchCache = new Map();
+    if (normalizeSearch(fileSearchInput.value)) {
+      currentFiles = lastSession.files;
+      await runFileSearch();
+    } else {
+      fileCountElement.textContent = `${lastSession.files.length} dosya`;
+      renderFileList(lastSession.files);
+    }
     setEmptyFileState("Listeden bir SQL dosyasina tiklayarak icerigini goruntule.");
     updateToolButtons();
   } catch {
